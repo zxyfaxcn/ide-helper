@@ -59,6 +59,7 @@ final class Handler
         'protocol' => 0,
         'ssl_verifyresult' => 0,
         'scheme' => '',
+        'private' => '',
     ];
 
     private $withHeaderOut = false;
@@ -115,6 +116,8 @@ final class Handler
 
     private $headers = [];
 
+    private $headerMap = [];
+
     private $transfer;
 
     private $errCode = 0;
@@ -125,11 +128,21 @@ final class Handler
 
     private $closed = false;
 
+    private $cookieJar = '';
+
+    private $resolve = [];
+
     public function __construct(string $url = '')
     {
         if ($url) {
             $this->setUrl($url);
         }
+    }
+
+    public function __toString()
+    {
+        $id = spl_object_id($this);
+        return "Object({$id}) of type (curl)";
     }
 
     /* ====== Public APIs ====== */
@@ -205,7 +218,15 @@ final class Handler
         if ($urlInfo === null) {
             $urlInfo = $this->urlInfo;
         }
-        $this->client = new Client($urlInfo['host'], $urlInfo['port'], $urlInfo['scheme'] === 'https');
+        $host = $urlInfo['host'];
+        $port = $urlInfo['port'];
+        if (isset($this->resolve[$host])) {
+            if (!$this->hasHeader('Host')) {
+                $this->setHeader('Host', $host);
+            }
+            $this->urlInfo['host'] = $host = $this->resolve[$host][$port] ?? null ?: $host;
+        }
+        $this->client = new Client($host, $port, $urlInfo['scheme'] === 'https');
     }
 
     private function getUrl(): string
@@ -269,11 +290,7 @@ final class Handler
         $port = $urlInfo['port'];
         if ($this->client) {
             $oldUrlInfo = $this->urlInfo;
-            if (
-                $host !== $oldUrlInfo['host'] or
-                $port !== $oldUrlInfo['port'] or
-                $scheme !== $oldUrlInfo['scheme']
-            ) {
+            if (($host !== $oldUrlInfo['host']) || ($port !== $oldUrlInfo['port']) || ($scheme !== $oldUrlInfo['scheme'])) {
                 /* target changed */
                 $this->create($urlInfo);
             }
@@ -285,7 +302,7 @@ final class Handler
     private function setPort(int $port): void
     {
         $this->info['primary_port'] = $port;
-        if ($this->urlInfo['port'] !== $port) {
+        if (!isset($this->urlInfo['port']) || $this->urlInfo['port'] !== $port) {
             $this->urlInfo['port'] = $port;
             if ($this->client) {
                 /* target changed */
@@ -297,7 +314,29 @@ final class Handler
     private function setError($code, $msg = ''): void
     {
         $this->errCode = $code;
-        $this->errMsg = $msg ? $msg : curl_strerror($code);
+        $this->errMsg = $msg ?: curl_strerror($code);
+    }
+
+    private function hasHeader(string $headerName): bool
+    {
+        return isset($this->headerMap[strtolower($headerName)]);
+    }
+
+    private function setHeader(string $headerName, string $value): void
+    {
+        $lowerCaseHeaderName = strtolower($headerName);
+
+        if (isset($this->headerMap[$lowerCaseHeaderName])) {
+            unset($this->headers[$this->headerMap[$lowerCaseHeaderName]]);
+        }
+
+        if ($value !== '') {
+            $this->headers[$headerName] = $value;
+            $this->headerMap[$lowerCaseHeaderName] = $headerName;
+        } else {
+            // remove empty headers (keep same with raw cURL)
+            unset($this->headerMap[$lowerCaseHeaderName]);
+        }
     }
 
     /**
@@ -312,7 +351,7 @@ final class Handler
             case CURLOPT_FILE:
             case CURLOPT_INFILE:
                 if (!is_resource($value)) {
-                    trigger_error(E_USER_WARNING, 'swoole_curl_setopt(): supplied argument is not a valid File-Handle resource');
+                    trigger_error('swoole_curl_setopt(): supplied argument is not a valid File-Handle resource', E_USER_WARNING);
                     return false;
                 }
                 break;
@@ -350,7 +389,7 @@ final class Handler
                         break;
                     }
                 }
-                $this->headers['Accept-Encoding'] = $value;
+                $this->setHeader('Accept-Encoding', $value);
                 break;
             case CURLOPT_PROXYTYPE:
                 if ($value !== CURLPROXY_HTTP and $value !== CURLPROXY_SOCKS5) {
@@ -384,6 +423,25 @@ final class Handler
                 $this->nobody = boolval($value);
                 $this->method = 'HEAD';
                 break;
+            case CURLOPT_RESOLVE:
+                foreach ((array) $value as $resolve) {
+                    $flag = substr($resolve, 0, 1);
+                    if ($flag === '+' || $flag === '-') {
+                        // TODO: [+]HOST:PORT:ADDRESS
+                        $resolve = substr($resolve, 1);
+                    }
+                    $tmpResolve = explode(':', $resolve, 3);
+                    $host = $tmpResolve[0] ?? '';
+                    $port = $tmpResolve[1] ?? 0;
+                    $ip = $tmpResolve[2] ?? '';
+                    if ($flag === '-') {
+                        unset($this->resolve[$host][$port]);
+                    } else {
+                        // TODO: HOST:PORT:ADDRESS[,ADDRESS]...
+                        $this->resolve[$host][$port] = explode(',', $ip)[0];
+                    }
+                }
+                break;
             case CURLOPT_IPRESOLVE:
                 if ($value !== CURL_IPRESOLVE_WHATEVER and $value !== CURL_IPRESOLVE_V4) {
                     throw new Swoole\Curl\Exception(
@@ -391,17 +449,23 @@ final class Handler
                     );
                 }
                 break;
+            case CURLOPT_TCP_NODELAY:
+                $this->clientOptions[Constant::OPTION_OPEN_TCP_NODELAY] = boolval($value);
+                break;
+            case CURLOPT_PRIVATE:
+                $this->info['private'] = $value;
+                break;
             /*
              * Ignore options
              */
             case CURLOPT_VERBOSE:
-                // trigger_error(E_USER_WARNING, 'swoole_curl_setopt(): CURLOPT_VERBOSE is not supported');
+                // trigger_error('swoole_curl_setopt(): CURLOPT_VERBOSE is not supported', E_USER_WARNING);
             case CURLOPT_SSLVERSION:
             case CURLOPT_NOSIGNAL:
             case CURLOPT_FRESH_CONNECT:
-                /*
-                 * From PHP 5.1.3, this option has no effect: the raw output will always be returned when CURLOPT_RETURNTRANSFER is used.
-                 */
+            /*
+             * From PHP 5.1.3, this option has no effect: the raw output will always be returned when CURLOPT_RETURNTRANSFER is used.
+             */
             case CURLOPT_BINARYTRANSFER: /* TODO */
             case CURLOPT_DNS_USE_GLOBAL_CACHE:
             case CURLOPT_DNS_CACHE_TIMEOUT:
@@ -410,6 +474,10 @@ final class Handler
             case CURLOPT_BUFFERSIZE:
             case CURLOPT_SSLCERTTYPE:
             case CURLOPT_SSLKEYTYPE:
+            case CURLOPT_NOPROXY:
+            case CURLOPT_CERTINFO:
+            case CURLOPT_HEADEROPT:
+            case CURLOPT_PROXYHEADER:
                 break;
             /*
              * SSL
@@ -430,6 +498,11 @@ final class Handler
                 break;
             case CURLOPT_CAPATH:
                 $this->clientOptions[Constant::OPTION_SSL_CAPATH] = $value;
+                break;
+            case CURLOPT_KEYPASSWD:
+            case CURLOPT_SSLCERTPASSWD:
+            case CURLOPT_SSLKEYPASSWD:
+                $this->clientOptions[Constant::OPTION_SSL_PASSPHRASE] = $value;
                 break;
             /*
              * Http POST
@@ -464,14 +537,11 @@ final class Handler
                     $header = explode(':', $header, 2);
                     $headerName = $header[0];
                     $headerValue = trim($header[1] ?? '');
-                    if (strlen($headerValue) === 0) {
-                        continue;
-                    }
-                    $this->headers[$headerName] = $headerValue;
+                    $this->setHeader($headerName, $headerValue);
                 }
                 break;
             case CURLOPT_REFERER:
-                $this->headers['Referer'] = $value;
+                $this->setHeader('Referer', $value);
                 break;
             case CURLINFO_HEADER_OUT:
                 $this->withHeaderOut = boolval($value);
@@ -480,14 +550,19 @@ final class Handler
                 $this->withFileTime = boolval($value);
                 break;
             case CURLOPT_USERAGENT:
-                $this->headers['User-Agent'] = $value;
+                $this->setHeader('User-Agent', $value);
                 break;
             case CURLOPT_CUSTOMREQUEST:
                 $this->method = (string) $value;
                 break;
             case CURLOPT_PROTOCOLS:
-                if ($value > 3) {
+                if (($value & ~(CURLPROTO_HTTP | CURLPROTO_HTTPS)) != 0) {
                     throw new CurlException("swoole_curl_setopt(): CURLOPT_PROTOCOLS[{$value}] is not supported");
+                }
+                break;
+            case CURLOPT_REDIR_PROTOCOLS:
+                if (($value & ~(CURLPROTO_HTTP | CURLPROTO_HTTPS)) != 0) {
+                    throw new CurlException("swoole_curl_setopt(): CURLOPT_REDIR_PROTOCOLS[{$value}] is not supported");
                 }
                 break;
             case CURLOPT_HTTP_VERSION:
@@ -503,7 +578,15 @@ final class Handler
              * Http Cookie
              */
             case CURLOPT_COOKIE:
-                $this->headers['Cookie'] = $value;
+                $this->setHeader('Cookie', $value);
+                break;
+            case CURLOPT_COOKIEJAR:
+                $this->cookieJar = (string) $value;
+                break;
+            case CURLOPT_COOKIEFILE:
+                if (is_file((string) $value)) {
+                    $this->setHeader('Cookie', file_get_contents($value));
+                }
                 break;
             case CURLOPT_CONNECTTIMEOUT:
                 $this->clientOptions[Constant::OPTION_CONNECT_TIMEOUT] = $value;
@@ -542,7 +625,7 @@ final class Handler
                 }
                 break;
             case CURLOPT_USERPWD:
-                $this->headers['Authorization'] = 'Basic ' . base64_encode($value);
+                $this->setHeader('Authorization', 'Basic ' . base64_encode($value));
                 break;
             case CURLOPT_FOLLOWLOCATION:
                 $this->followLocation = $value;
@@ -595,9 +678,20 @@ final class Handler
              * Http Proxy
              */
             if ($this->proxy) {
-                $proxy = explode(':', $this->proxy);
-                $proxyPort = $proxy[1] ?? $this->proxyPort;
-                $proxy = $proxy[0];
+                $parse = parse_url($this->proxy);
+                $proxy = $parse['host'] ?? $parse['path'];
+                $proxyPort = $parse['port'] ?? $this->proxyPort;
+                $proxyUsername = $parse['user'] ?? $this->proxyUsername;
+                $proxyPassword = $parse['pass'] ?? $this->proxyPassword;
+                $proxyType = $parse['scheme'] ?? $this->proxyType;
+                if (is_string($proxyType)) {
+                    if ($proxyType === 'socks5') {
+                        $proxyType = CURLPROXY_SOCKS5;
+                    } else {
+                        $proxyType = CURLPROXY_HTTP;
+                    }
+                }
+
                 if (!filter_var($proxy, FILTER_VALIDATE_IP)) {
                     $ip = Swoole\Coroutine::gethostbyname($proxy, AF_INET, $this->clientOptions['connect_timeout'] ?? -1);
                     if (!$ip) {
@@ -606,25 +700,25 @@ final class Handler
                     }
                     $this->proxy = $proxy = $ip;
                 }
-                switch ($this->proxyType) {
+                switch ($proxyType) {
                     case CURLPROXY_HTTP:
                         $proxyOptions = [
                             'http_proxy_host' => $proxy,
                             'http_proxy_port' => $proxyPort,
-                            'http_proxy_username' => $this->proxyUsername,
-                            'http_proxy_password' => $this->proxyPassword,
+                            'http_proxy_username' => $proxyUsername,
+                            'http_proxy_password' => $proxyPassword,
                         ];
                         break;
                     case CURLPROXY_SOCKS5:
                         $proxyOptions = [
                             'socks5_host' => $proxy,
                             'socks5_port' => $proxyPort,
-                            'socks5_username' => $this->proxyUsername,
-                            'socks5_password' => $this->proxyPassword,
+                            'socks5_username' => $proxyUsername,
+                            'socks5_password' => $proxyPassword,
                         ];
                         break;
                     default:
-                        throw new CurlException("Unexpected proxy type [{$this->proxyType}]");
+                        throw new CurlException("Unexpected proxy type [{$proxyType}]");
                 }
             }
             /*
@@ -641,9 +735,11 @@ final class Handler
                 $client->setMethod($this->method);
             }
             /*
-             * Infile
+             * Data
              */
             if ($this->infile) {
+                // Infile
+                // Notice: we make its priority higher than postData but raw cURL will send both of them
                 $data = '';
                 while (true) {
                     $nLength = $this->infileSize - strlen($data);
@@ -656,40 +752,33 @@ final class Handler
                     $data .= fread($this->infile, $nLength);
                 }
                 $client->setData($data);
+                // Notice: although we reset it, raw cURL never do this
                 $this->infile = null;
                 $this->infileSize = PHP_INT_MAX;
-            }
-            /*
-             * Upload File
-             */
-            if ($this->postData and is_array($this->postData)) {
-                foreach ($this->postData as $k => $v) {
-                    if ($v instanceof CURLFile) {
-                        $client->addFile($v->getFilename(), $k, $v->getMimeType() ?: 'application/octet-stream', $v->getPostFilename());
-                        unset($this->postData[$k]);
+            } else {
+                // POST data
+                if ($this->postData) {
+                    if (is_string($this->postData)) {
+                        if (!$this->hasHeader('content-type')) {
+                            $this->setHeader('Content-Type', 'application/x-www-form-urlencoded');
+                        }
+                    } elseif (is_array($this->postData)) {
+                        foreach ($this->postData as $k => $v) {
+                            if ($v instanceof CURLFile) {
+                                $client->addFile($v->getFilename(), $k, $v->getMimeType() ?: 'application/octet-stream', $v->getPostFilename());
+                                unset($this->postData[$k]);
+                            }
+                        }
                     }
                 }
-            }
-            /*
-             * Post Data
-             */
-            if ($this->postData) {
-                if (is_string($this->postData) and empty($this->headers['Content-Type'])) {
-                    $this->headers['Content-Type'] = 'application/x-www-form-urlencoded';
-                }
                 $client->setData($this->postData);
-                $this->postData = [];
             }
             /*
-             * Http Headers
+             * Headers
              */
-            $this->headers['Host'] = $this->urlInfo['host'];
-            // remove empty headers (keep same with raw cURL)
-            foreach ($this->headers as $headerName => $headerValue) {
-                if ($headerValue === '') {
-                    unset($this->headers[$headerName]);
-                }
-            }
+            // Notice: setHeaders must be placed last, because headers may be changed by other parts
+            // As much as possible to ensure that Host is the first header.
+            // See: http://tools.ietf.org/html/rfc7230#section-5.4
             $client->setHeaders($this->headers);
             /**
              * Execute.
@@ -699,6 +788,8 @@ final class Handler
                 $errCode = $client->errCode;
                 if ($errCode == SWOOLE_ERROR_DNSLOOKUP_RESOLVE_FAILED or $errCode == SWOOLE_ERROR_DNSLOOKUP_RESOLVE_TIMEOUT) {
                     $this->setError(CURLE_COULDNT_RESOLVE_HOST, 'Could not resolve host: ' . $client->host);
+                } else {
+                    $this->setError($errCode, $client->errMsg);
                 }
                 $this->info['total_time'] = microtime(true) - $timeBegin;
                 return false;
@@ -716,7 +807,7 @@ final class Handler
                         $this->method = 'GET';
                     }
                     if ($this->autoReferer) {
-                        $this->headers['Referer'] = $this->info['url'];
+                        $this->setHeader('Referer', $this->info['url']);
                     }
                     $this->setUrl($redirectUrl, false);
                     $this->setUrlInfo($redirectParsedUrl);
@@ -739,6 +830,10 @@ final class Handler
         $this->info['speed_download'] = 1 / $this->info['total_time'] * $this->info['size_download'];
         if (isset($redirectBeginTime)) {
             $this->info['redirect_time'] = microtime(true) - $redirectBeginTime;
+        }
+
+        if (filter_var($this->urlInfo['host'], FILTER_VALIDATE_IP)) {
+            $this->info['primary_ip'] = $this->urlInfo['host'];
         }
 
         $headerContent = '';
@@ -788,6 +883,30 @@ final class Handler
             } else {
                 $this->info['filetime'] = -1;
             }
+        }
+
+        if ($this->cookieJar && $this->cookieJar !== '') {
+            if ($this->cookieJar === '-') {
+                foreach ((array) $client->set_cookie_headers as $cookie) {
+                    echo $cookie . PHP_EOL;
+                }
+            } else {
+                $cookies = '';
+                foreach ((array) $client->set_cookie_headers as $cookie) {
+                    $cookies .= "{$cookie};";
+                }
+                file_put_contents($this->cookieJar, $cookies);
+            }
+        }
+
+        if ($this->writeFunction) {
+            if (!is_callable($this->writeFunction)) {
+                trigger_error('curl_exec(): Could not call the CURLOPT_WRITEFUNCTION', E_USER_WARNING);
+                $this->setError(CURLE_WRITE_ERROR, 'Failure writing output to destination');
+                return false;
+            }
+            call_user_func($this->writeFunction, $this, $transfer);
+            return true;
         }
 
         if ($this->returnTransfer) {
@@ -840,9 +959,11 @@ final class Handler
                 }
                 $redirectUri['path'] = $path . $location;
             }
-            foreach ($uri as $k => $v) {
-                if (!in_array($k, ['path', 'query'])) {
-                    $redirectUri[$k] = $v;
+            if (is_array($uri)) {
+                foreach ($uri as $k => $v) {
+                    if (!in_array($k, ['path', 'query'])) {
+                        $redirectUri[$k] = $v;
+                    }
                 }
             }
         }

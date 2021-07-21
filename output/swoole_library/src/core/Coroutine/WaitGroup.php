@@ -22,9 +22,12 @@ class WaitGroup
 
     protected $waiting = false;
 
-    public function __construct()
+    public function __construct(int $delta = 0)
     {
         $this->chan = new Channel(1);
+        if ($delta > 0) {
+            $this->add($delta);
+        }
     }
 
     public function add(int $delta = 1): void
@@ -63,5 +66,10 @@ class WaitGroup
             return $done;
         }
         return true;
+    }
+
+    public function count(): int
+    {
+        return $this->count;
     }
 }

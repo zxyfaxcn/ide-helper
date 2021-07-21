@@ -29,6 +29,13 @@ class Coroutine
     /**
      * @return mixed
      */
+    public static function getOptions()
+    {
+    }
+
+    /**
+     * @return mixed
+     */
     public static function exists($cid)
     {
     }
@@ -37,6 +44,20 @@ class Coroutine
      * @return mixed
      */
     public static function yield()
+    {
+    }
+
+    /**
+     * @return mixed
+     */
+    public static function cancel($cid)
+    {
+    }
+
+    /**
+     * @return mixed
+     */
+    public static function isCanceled()
     {
     }
 
@@ -99,6 +120,13 @@ class Coroutine
     /**
      * @return mixed
      */
+    public static function printBackTrace($cid = null, $options = null, $limit = null)
+    {
+    }
+
+    /**
+     * @return mixed
+     */
     public static function getElapsed($cid = null)
     {
     }
@@ -141,7 +169,7 @@ class Coroutine
     /**
      * @return mixed
      */
-    public static function dnsLookup($domain_name, $timeout = null)
+    public static function dnsLookup($domain_name, $timeout = null, $type = null)
     {
     }
 

@@ -18,9 +18,10 @@ function swoole_last_error(){}
 /**
  * @param $domain_name[required]
  * @param $timeout[optional]
+ * @param $type[optional]
  * @return mixed
  */
-function swoole_async_dns_lookup_coro($domain_name, $timeout = null){}
+function swoole_async_dns_lookup_coro($domain_name, $timeout = null, $type = null){}
 
 /**
  * @param $settings[required]
@@ -40,6 +41,21 @@ function swoole_coroutine_create($func, $params = null){}
  * @return mixed
  */
 function swoole_coroutine_defer($callback){}
+
+/**
+ * @param $domain[required]
+ * @param $type[required]
+ * @param $protocol[required]
+ * @return mixed
+ */
+function swoole_coroutine_socketpair($domain, $type, $protocol){}
+
+/**
+ * @param $count[optional]
+ * @param $sleep_time[optional]
+ * @return mixed
+ */
+function swoole_test_kernel_coroutine($count = null, $sleep_time = null){}
 
 /**
  * @param $read_array[required]
@@ -86,6 +102,18 @@ function swoole_strerror($errno, $error_type = null){}
  * @return mixed
  */
 function swoole_errno(){}
+
+/**
+ * @return mixed
+ */
+function swoole_clear_error(){}
+
+/**
+ * @param $level[required]
+ * @param $msg[required]
+ * @return mixed
+ */
+function swoole_error_log($level, $msg){}
 
 /**
  * @param $data[required]
@@ -135,7 +163,32 @@ function swoole_mime_type_exists($filename){}
 /**
  * @return mixed
  */
+function swoole_mime_type_list(){}
+
+/**
+ * @return mixed
+ */
 function swoole_clear_dns_cache(){}
+
+/**
+ * @param $str[required]
+ * @param $offset[required]
+ * @param $length[optional]
+ * @param $options[optional]
+ * @return mixed
+ */
+function swoole_substr_unserialize($str, $offset, $length = null, $options = null){}
+
+/**
+ * @param $json[required]
+ * @param $offset[required]
+ * @param $length[optional]
+ * @param $associative[optional]
+ * @param $depth[optional]
+ * @param $flags[optional]
+ * @return mixed
+ */
+function swoole_substr_json_decode($json, $offset, $length = null, $associative = null, $depth = null, $flags = null){}
 
 /**
  * @return mixed

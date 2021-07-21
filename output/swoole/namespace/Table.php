@@ -2,14 +2,18 @@
 
 namespace Swoole;
 
-class Table implements \Iterator, \Traversable, \ArrayAccess
+class Table implements \Iterator, \ArrayAccess, \Countable
 {
 
     public const TYPE_INT = 1;
 
-    public const TYPE_STRING = 7;
+    public const TYPE_STRING = 3;
 
-    public const TYPE_FLOAT = 6;
+    public const TYPE_FLOAT = 2;
+
+    public $size;
+
+    public $memorySize;
 
     public function __construct($table_size, $conflict_proportion = null)
     {
@@ -67,6 +71,13 @@ class Table implements \Iterator, \Traversable, \ArrayAccess
     /**
      * @return mixed
      */
+    public function delete($key)
+    {
+    }
+
+    /**
+     * @return mixed
+     */
     public function exists($key)
     {
     }
@@ -95,6 +106,13 @@ class Table implements \Iterator, \Traversable, \ArrayAccess
     /**
      * @return mixed
      */
+    public function getSize()
+    {
+    }
+
+    /**
+     * @return mixed
+     */
     public function getMemorySize()
     {
     }
@@ -102,35 +120,14 @@ class Table implements \Iterator, \Traversable, \ArrayAccess
     /**
      * @return mixed
      */
-    public function offsetExists($offset)
-    {
-    }
-
-    /**
-     * @return mixed
-     */
-    public function offsetGet($offset)
-    {
-    }
-
-    /**
-     * @return mixed
-     */
-    public function offsetSet($offset, $value)
-    {
-    }
-
-    /**
-     * @return mixed
-     */
-    public function offsetUnset($offset)
-    {
-    }
-
-    /**
-     * @return mixed
-     */
     public function rewind()
+    {
+    }
+
+    /**
+     * @return mixed
+     */
+    public function valid()
     {
     }
 
@@ -152,13 +149,6 @@ class Table implements \Iterator, \Traversable, \ArrayAccess
      * @return mixed
      */
     public function key()
-    {
-    }
-
-    /**
-     * @return mixed
-     */
-    public function valid()
     {
     }
 

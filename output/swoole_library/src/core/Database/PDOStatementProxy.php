@@ -59,18 +59,20 @@ class PDOStatementProxy extends ObjectProxy
                 }
                 /* no more chances or non-IO failures or in transaction */
                 if (
-                    !in_array($this->__object->errorInfo()[1], $this->parent::IO_ERRORS, true) ||
-                    $n === 0 ||
-                    $this->parent->inTransaction()
+                    !in_array($this->__object->errorInfo()[1], $this->parent::IO_ERRORS, true)
+                    || $n === 0
+                    || $this->parent->inTransaction()
                 ) {
                     $errorInfo = $this->__object->errorInfo();
 
-                    // '00000' means “no error.”, as specified by ANSI SQL and ODBC.
-                    if ($errorInfo[0] !== '00000') {
+                    /* '00000' means “no error.”, as specified by ANSI SQL and ODBC. */
+                    if (!empty($errorInfo) && $errorInfo[0] !== '00000') {
                         $exception = new PDOException($errorInfo[2], $errorInfo[1]);
                         $exception->errorInfo = $errorInfo;
                         throw $exception;
                     }
+                    /* no error info, just return false */
+                    break;
                 }
                 if ($this->parent->getRound() === $this->parentRound) {
                     /* if not equal, parent has reconnected */
@@ -93,18 +95,18 @@ class PDOStatementProxy extends ObjectProxy
                     $this->__object->setFetchMode(...$this->setFetchModeContext);
                 }
                 if ($this->bindParamContext) {
-                    foreach ($this->bindParamContext as $param => $arguments) {
-                        $this->__object->bindParam($param, ...$arguments);
+                    foreach ($this->bindParamContext as $param => $item) {
+                        $this->__object->bindParam($param, ...$item);
                     }
                 }
                 if ($this->bindColumnContext) {
-                    foreach ($this->bindColumnContext as $column => $arguments) {
-                        $this->__object->bindColumn($column, ...$arguments);
+                    foreach ($this->bindColumnContext as $column => $item) {
+                        $this->__object->bindColumn($column, ...$item);
                     }
                 }
                 if ($this->bindValueContext) {
-                    foreach ($this->bindValueContext as $value => $arguments) {
-                        $this->__object->bindParam($value, ...$arguments);
+                    foreach ($this->bindValueContext as $value => $item) {
+                        $this->__object->bindParam($value, ...$item);
                     }
                 }
                 continue;
@@ -121,13 +123,10 @@ class PDOStatementProxy extends ObjectProxy
         return $this->__object->setAttribute($attribute, $value);
     }
 
-    public function setFetchMode(int $mode, $classNameObject = null, array $ctorarfg = []): bool
+    public function setFetchMode(int $mode, ...$args): bool
     {
-        $this->setFetchModeContext = [$mode, $classNameObject, $ctorarfg];
-        if (!isset($classNameObject)) {
-            return $this->__object->setFetchMode($mode);
-        }
-        return $this->__object->setFetchMode($mode, $classNameObject, $ctorarfg);
+        $this->setFetchModeContext = func_get_args();
+        return $this->__object->setFetchMode(...$this->setFetchModeContext);
     }
 
     public function bindParam($parameter, &$variable, $data_type = PDO::PARAM_STR, $length = null, $driver_options = null): bool

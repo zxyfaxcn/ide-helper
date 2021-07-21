@@ -73,7 +73,14 @@ class Process
     /**
      * @return mixed
      */
-    public static function setaffinity(array $cpu_settings)
+    public function setPriority($which, $priority)
+    {
+    }
+
+    /**
+     * @return mixed
+     */
+    public function getPriority($which)
     {
     }
 

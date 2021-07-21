@@ -25,21 +25,28 @@ class Response
     /**
      * @return mixed
      */
-    public function cookie($name, $value = null, $expires = null, $path = null, $domain = null, $secure = null, $httponly = null, $samesite = null)
+    public function isWritable()
     {
     }
 
     /**
      * @return mixed
      */
-    public function setCookie($name, $value = null, $expires = null, $path = null, $domain = null, $secure = null, $httponly = null, $samesite = null)
+    public function cookie($name, $value = null, $expires = null, $path = null, $domain = null, $secure = null, $httponly = null, $samesite = null, $priority = null)
     {
     }
 
     /**
      * @return mixed
      */
-    public function rawcookie($name, $value = null, $expires = null, $path = null, $domain = null, $secure = null, $httponly = null, $samesite = null)
+    public function setCookie($name, $value = null, $expires = null, $path = null, $domain = null, $secure = null, $httponly = null, $samesite = null, $priority = null)
+    {
+    }
+
+    /**
+     * @return mixed
+     */
+    public function rawcookie($name, $value = null, $expires = null, $path = null, $domain = null, $secure = null, $httponly = null, $samesite = null, $priority = null)
     {
     }
 
@@ -60,14 +67,14 @@ class Response
     /**
      * @return mixed
      */
-    public function header($key, $value, $ucwords = null)
+    public function header($key, $value, $format = null)
     {
     }
 
     /**
      * @return mixed
      */
-    public function setHeader($key, $value, $ucwords = null)
+    public function setHeader($key, $value, $format = null)
     {
     }
 
@@ -82,6 +89,13 @@ class Response
      * @return mixed
      */
     public function ping()
+    {
+    }
+
+    /**
+     * @return mixed
+     */
+    public function goaway()
     {
     }
 

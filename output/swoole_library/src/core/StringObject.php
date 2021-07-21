@@ -20,7 +20,6 @@ class StringObject
 
     /**
      * StringObject constructor.
-     * @param $string
      */
     public function __construct(string $string = '')
     {
@@ -104,7 +103,7 @@ class StringObject
     /**
      * @return static
      */
-    public function lrim(): self
+    public function ltrim(): self
     {
         return new static(ltrim($this->string));
     }
@@ -125,16 +124,28 @@ class StringObject
         return new static(substr($this->string, ...func_get_args()));
     }
 
-    public function repeat(int $n): StringObject
+    /**
+     * @return static
+     */
+    public function repeat(int $times): self
     {
-        return new static(str_repeat($this->string, $n));
+        return new static(str_repeat($this->string, $times));
+    }
+
+    /**
+     * @param mixed $str
+     * @return static
+     */
+    public function append($str): self
+    {
+        return new static($this->string .= $str);
     }
 
     /**
      * @param null|int $count
      * @return static
      */
-    public function replace(string $search, string $replace, &$count = null)
+    public function replace(string $search, string $replace, &$count = null): self
     {
         return new static(str_replace($search, $replace, $this->string, $count));
     }
@@ -144,14 +155,25 @@ class StringObject
         return strpos($this->string, $needle) === 0;
     }
 
+    public function endsWith(string $needle): bool
+    {
+        return strrpos($this->string, $needle) === (strlen($this->string) - strlen($needle));
+    }
+
+    public function equals($str, bool $strict = false): bool
+    {
+        if ($str instanceof StringObject) {
+            $str = strval($str);
+        }
+        if ($strict) {
+            return $this->string === $str;
+        }
+        return $this->string == $str;
+    }
+
     public function contains(string $subString): bool
     {
         return strpos($this->string, $subString) !== false;
-    }
-
-    public function endsWith(string $needle): bool
-    {
-        return strrpos($this->string, $needle) === (strlen($needle) - 1);
     }
 
     public function split(string $delimiter, int $limit = PHP_INT_MAX): ArrayObject
@@ -161,13 +183,16 @@ class StringObject
 
     public function char(int $index): string
     {
+        if ($index > strlen($this->string)) {
+            return '';
+        }
         return $this->string[$index];
     }
 
     /**
      * @return static
      */
-    public function chunkSplit(int $chunkLength = 1, string $chunkEnd = '')
+    public function chunkSplit(int $chunkLength = 76, string $chunkEnd = ''): self
     {
         return new static(chunk_split($this->string, ...func_get_args()));
     }
@@ -177,10 +202,7 @@ class StringObject
         return static::detectArrayType(str_split($this->string, ...func_get_args()));
     }
 
-    /**
-     * @return string
-     */
-    public function toString()
+    public function toString(): string
     {
         return $this->string;
     }

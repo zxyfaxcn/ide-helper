@@ -15,7 +15,7 @@ use Symfony\Component\Filesystem\Filesystem;
  *
  * @package Swoole\IDEHelper\StubGenerators
  * @see https://github.com/swoole/swoole-src/tree/master/library
- * @see https://github.com/swoole/swoole-src/blob/v4.4.13/php_swoole_library.h#L5
+ * @see https://github.com/swoole/swoole-src/blob/v4.5.6/ext-src/php_swoole_library.h#L5
  */
 class SwooleLib extends AbstractStubGenerator
 {
@@ -23,7 +23,6 @@ class SwooleLib extends AbstractStubGenerator
         "src/ext",
         "src/std",
         "src/constants.php",
-        "src/functions.php",
     ];
 
     /**
